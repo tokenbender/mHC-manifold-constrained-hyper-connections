@@ -80,6 +80,11 @@ dtype = "bfloat16"
 # torch.compile (requires PyTorch 2.0+)
 compile_model = False
 
+# wandb logging
+wandb_log = True
+wandb_project = "mhc-nanogpt"
+wandb_run_name = "baseline"
+
 # DDP backend: "nccl", "gloo", etc.
 # If NCCL fails, set NCCL_IB_DISABLE=1 or use backend="gloo"
 backend = "nccl"
@@ -311,6 +316,29 @@ if master_process:
     print(f"  model params: {sum(p.numel() for p in raw_model.parameters()):,}")
     print()
 
+if wandb_log and master_process:
+    import wandb
+
+    wandb.init(
+        project=wandb_project,
+        name=wandb_run_name,
+        config={
+            "dataset": dataset,
+            "n_layer": n_layer,
+            "n_head": n_head,
+            "n_embd": n_embd,
+            "batch_size": batch_size,
+            "block_size": block_size,
+            "learning_rate": learning_rate,
+            "max_iters": max_iters,
+            "hc_num_streams": hc_num_streams,
+            "hc_disable": hc_disable,
+            "dtype": dtype,
+            "world_size": ddp_world_size,
+            "tokens_per_iter": tokens_per_iter,
+        },
+    )
+
 while iter_num <= max_iters:
     lr = get_lr(iter_num)
     for param_group in optimizer.param_groups:
@@ -322,6 +350,11 @@ while iter_num <= max_iters:
         print(
             f"iter {iter_num}: train loss {losses['train']:.4f}, val loss {losses['val']:.4f}"
         )
+        if wandb_log:
+            wandb.log(
+                {"val/loss": losses["val"], "train/loss_eval": losses["train"]},
+                step=iter_num,
+            )
         if losses["val"] < best_val_loss:
             best_val_loss = losses["val"]
             os.makedirs(out_dir, exist_ok=True)
@@ -378,11 +411,24 @@ while iter_num <= max_iters:
             f"iter {iter_num}: loss {loss_item:.4f}, lr {lr:.2e}, "
             f"time {dt * 1000:.0f}ms, tok/s {tokens_per_sec:.0f}"
         )
+        if wandb_log:
+            wandb.log(
+                {
+                    "train/loss": loss_item,
+                    "train/lr": lr,
+                    "perf/tok_per_sec": tokens_per_sec,
+                    "perf/iter_time_ms": dt * 1000,
+                },
+                step=iter_num,
+            )
 
     iter_num += 1
 
 # -----------------------------------------------------------------------------
 # Cleanup
+
+if wandb_log and master_process:
+    wandb.finish()
 
 if ddp:
     dist.destroy_process_group()
