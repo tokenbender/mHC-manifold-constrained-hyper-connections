@@ -28,6 +28,7 @@ classifiers=[
 dependencies = [
     "einops>=0.8.0",
     "torch>=2.3",
+    "pytest>=8.2.0",
 ]
 
 [project.urls]
@@ -45,7 +46,6 @@ build-backend = "hatchling.build"
 
 [tool.rye]
 managed = true
-dev-dependencies = ["pytest>=8.2.0"]
 
 [tool.hatch.metadata]
 allow-direct-references = true
