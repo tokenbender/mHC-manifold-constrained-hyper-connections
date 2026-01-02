@@ -21,19 +21,27 @@ Static per-layer matrices (closest to the paper):
 
 This is a research prototype aimed at correctness + clarity, not the paper's systems optimizations.
 
-### Running (nanogpt)
+### Running (nanoGPT on FineWeb10B)
 
-Baseline (fineweb10B):
-
-```bash
-torchrun --standalone --nproc_per_node=4 --log-dir /tmp/torchrun --redirects 3 --tee 3 examples/nanogpt/train.py examples/nanogpt/config/train_fineweb10B.py
-```
-
-Hyper-Connections (fineweb10B):
+**Baseline** (no hyper-connections):
 
 ```bash
-torchrun --standalone --nproc_per_node=4 --log-dir /tmp/torchrun --redirects 3 --tee 3 examples/nanogpt/train.py examples/nanogpt/config/train_fineweb10B_hc.py
+torchrun --standalone --nproc_per_node=4 train.py config/train_fineweb10B.py
 ```
+
+**HC** (vanilla Hyper-Connections, 4 streams):
+
+```bash
+torchrun --standalone --nproc_per_node=4 train.py config/train_fineweb10B_hc.py
+```
+
+**mHC** (Manifold-Constrained Hyper-Connections, 4 streams):
+
+```bash
+torchrun --standalone --nproc_per_node=4 train.py config/train_fineweb10B_mhc.py
+```
+
+Run from `examples/nanogpt/`. Adjust `--nproc_per_node` to match your GPU count.
 
 ### Acknowledgements
 
