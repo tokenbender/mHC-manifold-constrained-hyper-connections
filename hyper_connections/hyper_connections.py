@@ -203,7 +203,7 @@ class HyperConnections(Module):
         sinkhorn_iters=10,
         sinkhorn_tau=0.05,
         mhc_residual_identity_mix=False,
-        mhc_residual_alpha=0.9,
+        mhc_residual_alpha=0.01,
     ):
         """
         Appendix J, Algorithm2 in - https://arxiv.org/abs/2409.19606

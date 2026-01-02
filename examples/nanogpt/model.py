@@ -169,7 +169,7 @@ class GPTConfig:
         self.sinkhorn_iters = kwargs.pop("sinkhorn_iters", 10)
         self.sinkhorn_tau = kwargs.pop("sinkhorn_tau", 0.05)
         self.mhc_residual_identity_mix = kwargs.pop("mhc_residual_identity_mix", False)
-        self.mhc_residual_alpha = kwargs.pop("mhc_residual_alpha", 0.9)
+        self.mhc_residual_alpha = kwargs.pop("mhc_residual_alpha", 0.01)
         self.v_residual = kwargs.pop("v_residual", False)
         self.v_residual_lamb_lr = kwargs.pop("v_residual_lamb_lr", 1e-2)
 

@@ -321,10 +321,10 @@ def test_mhc_identity_mix_alpha_init():
         dim=64,
         mhc=True,
         mhc_residual_identity_mix=True,
-        mhc_residual_alpha=0.9,
+        mhc_residual_alpha=0.01,
     )
     alpha = torch.sigmoid(hc.H_res_alpha_logit)
-    assert torch.allclose(alpha, torch.tensor(0.9), atol=1e-3)
+    assert torch.allclose(alpha, torch.tensor(0.01), atol=1e-3)
 
 
 def test_mhc_identity_mix_gradients_flow():
