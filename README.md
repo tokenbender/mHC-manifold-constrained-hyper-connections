@@ -44,9 +44,11 @@ torchrun --standalone --nproc_per_node=4 train.py config/train_fineweb10B_mhc.py
 Run from `examples/nanogpt/`. Adjust `--nproc_per_node` to match your GPU count.
 
 ### Next steps planned
-- Ablations with value residuals
-- H^res = `(1−α)*I + α*S` instead of full doubly stochastic
-- Replace sinkhorn-knopp w/ Muon's orthogonalization op
+- [x] Value residual ablations with baseline/HC/mHC
+- [ ] AltUP ablation
+- [ ] H^res = `(1−α)*I + α*S` instead of full doubly stochastic
+- [ ] Replace sinkhorn-knopp w/ Muon's orthogonalization op
+- [ ] U-net-based variants + value embeddings
 
 
 ### Acknowledgements
