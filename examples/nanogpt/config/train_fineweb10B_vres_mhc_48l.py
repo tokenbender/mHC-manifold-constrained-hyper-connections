@@ -57,6 +57,7 @@ ns_steps = 5
 ns_eps = 1e-7
 ns_coeffs = (3.0, -3.2, 1.2)
 
-# value residual (attention-internal)
+# value residual (attention-internal, constrained to convex mixing)
 v_residual = True
+v_residual_constrained = True
 v_residual_lamb_lr = 1e-2

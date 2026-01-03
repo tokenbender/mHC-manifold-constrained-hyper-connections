@@ -34,12 +34,13 @@ class CausalSelfAttention(nn.Module):
         self.resid_dropout = nn.Dropout(config.dropout)
 
         self.v_residual = config.v_residual
+        self.v_residual_constrained = config.v_residual_constrained
         if self.v_residual:
-            self.lamb1 = nn.Parameter(torch.tensor(0.5))
-            self.lamb2 = nn.Parameter(torch.tensor(0.5))
-        else:
-            self.lamb1 = 1.0
-            self.lamb2 = 0.0
+            if self.v_residual_constrained:
+                self.lamb_logits = nn.Parameter(torch.tensor([0.0, -8.0]))
+            else:
+                self.lamb1 = nn.Parameter(torch.tensor(0.5))
+                self.lamb2 = nn.Parameter(torch.tensor(0.5))
 
         self.flash = hasattr(F, "scaled_dot_product_attention")
         if not self.flash:
@@ -61,7 +62,11 @@ class CausalSelfAttention(nn.Module):
         if self.v_residual:
             if vrl_state is None:
                 raise ValueError("v_residual requires vrl_state")
-            v = vrl_state.mix(v, self.lamb1, self.lamb2)
+            if self.v_residual_constrained:
+                lamb = F.softmax(self.lamb_logits, dim=-1)
+                v = vrl_state.mix(v, lamb[0], lamb[1])
+            else:
+                v = vrl_state.mix(v, self.lamb1, self.lamb2)
 
         q = q.transpose(1, 2)
         k = k.transpose(1, 2)
@@ -175,6 +180,7 @@ class GPTConfig:
         self.ns_eps = kwargs.pop("ns_eps", 1e-7)
         self.ns_coeffs = kwargs.pop("ns_coeffs", (3.0, -3.2, 1.2))
         self.v_residual = kwargs.pop("v_residual", False)
+        self.v_residual_constrained = kwargs.pop("v_residual_constrained", False)
         self.v_residual_lamb_lr = kwargs.pop("v_residual_lamb_lr", 1e-2)
 
         for key, value in kwargs.items():
