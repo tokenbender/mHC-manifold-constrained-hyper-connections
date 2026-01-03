@@ -2,7 +2,7 @@
 # ~20M param GPT-2 style model
 #
 # Combines:
-#   - Value Residual (attention-internal V mixing)
+#   - Value Residual (unconstrained lamb1/lamb2)
 #   - mHC (manifold-constrained residual stream routing)
 #
 # Usage:
@@ -57,7 +57,6 @@ ns_steps = 5
 ns_eps = 1e-7
 ns_coeffs = (3.0, -3.2, 1.2)
 
-# value residual (attention-internal, constrained to convex mixing)
+# value residual (unconstrained)
 v_residual = True
-v_residual_constrained = True
 v_residual_lamb_lr = 1e-2

@@ -1,16 +1,16 @@
-# FineWeb10B with vRes + mHC (4 streams)
+# FineWeb10B with constrained vRes + mHC (4 streams)
 # ~20M param GPT-2 style model
 #
 # Combines:
-#   - Value Residual (unconstrained lamb1/lamb2)
+#   - Constrained Value Residual (softmax mixing)
 #   - mHC (manifold-constrained residual stream routing)
 #
 # Usage:
-#   python train.py config/train_fineweb10B_vres_mhc.py
-#   torchrun --standalone --nproc_per_node=4 train.py config/train_fineweb10B_vres_mhc.py
+#   python train.py config/train_fineweb10B_cvres_mhc.py
+#   torchrun --standalone --nproc_per_node=4 train.py config/train_fineweb10B_cvres_mhc.py
 
-out_dir = "out-fineweb10B-vres-mhc"
-wandb_run_name = "vres-mhc"
+out_dir = "out-fineweb10B-cvres-mhc"
+wandb_run_name = "cvres-mhc"
 
 dataset = "fineweb10B"
 
@@ -56,6 +56,7 @@ ns_steps = 5
 ns_eps = 1e-7
 ns_coeffs = (3.0, -3.2, 1.2)
 
-# value residual (unconstrained)
+# value residual (attention-internal, constrained to convex mixing)
 v_residual = True
+v_residual_constrained = True
 v_residual_lamb_lr = 1e-2
