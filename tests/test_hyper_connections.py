@@ -321,3 +321,59 @@ def test_mhc_gradients_flow():
     assert not torch.isnan(hc.H_res_logits.grad).any()
     assert not torch.isnan(hc.H_pre_logits.grad).any()
     assert not torch.isnan(hc.H_post_logits.grad).any()
+
+
+def test_mhc_channel_first_H_res_constraints():
+    from hyper_connections.hyper_connections_channel_first import HyperConnections
+    from hyper_connections.hyper_connections import sinkhorn_log
+
+    hc = HyperConnections(num_residual_streams=4, dim=64, mhc=True)
+    H_res = sinkhorn_log(hc.H_res_logits, hc.sinkhorn_iters, hc.sinkhorn_tau)
+
+    assert H_res.min().item() >= 0
+    assert torch.allclose(
+        H_res.sum(dim=-1),
+        torch.ones(4, device=H_res.device, dtype=H_res.dtype),
+        atol=1e-3,
+    )
+    assert torch.allclose(
+        H_res.sum(dim=-2),
+        torch.ones(4, device=H_res.device, dtype=H_res.dtype),
+        atol=1e-3,
+    )
+
+
+def test_mhc_channel_first_H_pre_H_post_constraints():
+    from hyper_connections.hyper_connections_channel_first import HyperConnections
+
+    hc = HyperConnections(num_residual_streams=4, dim=64, mhc=True)
+    H_pre = torch.softmax(hc.H_pre_logits, dim=-1)
+    H_post = torch.softmax(hc.H_post_logits, dim=-1)
+
+    assert H_pre.min().item() >= 0
+    assert H_post.min().item() >= 0
+    assert torch.allclose(
+        H_pre.sum(),
+        torch.ones((), device=H_pre.device, dtype=H_pre.dtype),
+        atol=1e-6,
+    )
+    assert torch.allclose(
+        H_post.sum(),
+        torch.ones((), device=H_post.device, dtype=H_post.dtype),
+        atol=1e-6,
+    )
+
+
+def test_mhc_channel_first_forward_shapes():
+    from hyper_connections.hyper_connections_channel_first import HyperConnections
+
+    streams, dim, batch, height, width = 4, 64, 2, 8, 8
+    hc = HyperConnections(num_residual_streams=streams, dim=dim, mhc=True)
+    x = torch.randn(batch * streams, dim, height, width)
+
+    branch_input, add_residual = hc(x)
+    assert branch_input.shape == (batch, dim, height, width)
+
+    branch_output = torch.randn(batch, dim, height, width)
+    out = add_residual(branch_output)
+    assert out.shape == (batch * streams, dim, height, width)

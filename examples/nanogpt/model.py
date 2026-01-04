@@ -8,6 +8,20 @@ from hyper_connections import get_init_and_expand_reduce_stream_functions
 from value_residual import ValueResidualState
 
 
+NS_COEFFS = (
+    (7.2086, -15.5131, 9.0178),
+    (3.9623, -2.5813, 0.4542),
+    (3.9466, -2.5765, 0.4544),
+    (3.8991, -2.5671, 0.4566),
+    (3.7186, -2.5308, 0.4653),
+    (3.1390, -2.3073, 0.4733),
+    (2.1715, -1.5246, 0.3885),
+    (1.8648, -1.2224, 0.3577),
+)
+
+NS_STEPS = len(NS_COEFFS)
+
+
 class LayerNorm(nn.Module):
     def __init__(self, ndim, bias):
         super().__init__()
@@ -176,9 +190,9 @@ class GPTConfig:
         self.sinkhorn_iters = kwargs.pop("sinkhorn_iters", 10)
         self.sinkhorn_tau = kwargs.pop("sinkhorn_tau", 0.05)
         self.mhc_h_res_proj = kwargs.pop("mhc_h_res_proj", "sinkhorn")
-        self.ns_steps = kwargs.pop("ns_steps", 5)
+        self.ns_steps = kwargs.pop("ns_steps", NS_STEPS)
         self.ns_eps = kwargs.pop("ns_eps", 1e-7)
-        self.ns_coeffs = kwargs.pop("ns_coeffs", (3.0, -3.2, 1.2))
+        self.ns_coeffs = kwargs.pop("ns_coeffs", NS_COEFFS)
         self.v_residual = kwargs.pop("v_residual", False)
         self.v_residual_constrained = kwargs.pop("v_residual_constrained", False)
         self.v_residual_lamb_lr = kwargs.pop("v_residual_lamb_lr", 1e-2)

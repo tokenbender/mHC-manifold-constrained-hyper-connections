@@ -64,9 +64,21 @@ def sinkhorn_log(logits, num_iters=10, tau=0.05):
     return torch.exp(Z + u.unsqueeze(1) + v.unsqueeze(0)) * n
 
 
-def zeropower_via_newtonschulz(X, steps=5, eps=1e-7, coeffs=(3.0, -3.2, 1.2)):
-    a, b, c = coeffs
+NS_COEFFS = (
+    (7.2086, -15.5131, 9.0178),
+    (3.9623, -2.5813, 0.4542),
+    (3.9466, -2.5765, 0.4544),
+    (3.8991, -2.5671, 0.4566),
+    (3.7186, -2.5308, 0.4653),
+    (3.1390, -2.3073, 0.4733),
+    (2.1715, -1.5246, 0.3885),
+    (1.8648, -1.2224, 0.3577),
+)
 
+NS_STEPS = len(NS_COEFFS)
+
+
+def zeropower_via_newtonschulz(X, steps=NS_STEPS, eps=1e-7, coeffs=NS_COEFFS):
     X = X / (X.norm() + eps)
 
     transpose = False
@@ -74,10 +86,17 @@ def zeropower_via_newtonschulz(X, steps=5, eps=1e-7, coeffs=(3.0, -3.2, 1.2)):
         X = X.T
         transpose = True
 
-    for _ in range(steps):
-        A = X @ X.T
-        B = b * A + c * A @ A
-        X = a * X + B @ X
+    if isinstance(coeffs[0], (tuple, list)):
+        for a, b, c in coeffs:
+            A = X @ X.T
+            B = b * A + c * A @ A
+            X = a * X + B @ X
+    else:
+        a, b, c = coeffs
+        for _ in range(steps):
+            A = X @ X.T
+            B = b * A + c * A @ A
+            X = a * X + B @ X
 
     if transpose:
         X = X.T
@@ -86,7 +105,7 @@ def zeropower_via_newtonschulz(X, steps=5, eps=1e-7, coeffs=(3.0, -3.2, 1.2)):
 
 
 def orthostochastic_project(
-    logits, ns_steps=5, ns_eps=1e-7, ns_coeffs=(3.0, -3.2, 1.2)
+    logits, ns_steps=NS_STEPS, ns_eps=1e-7, ns_coeffs=NS_COEFFS
 ):
     O = zeropower_via_newtonschulz(logits, steps=ns_steps, eps=ns_eps, coeffs=ns_coeffs)
     return O.square()
@@ -231,9 +250,9 @@ class HyperConnections(Module):
         sinkhorn_iters=10,
         sinkhorn_tau=0.05,
         mhc_h_res_proj="sinkhorn",
-        ns_steps=5,
+        ns_steps=NS_STEPS,
         ns_eps=1e-7,
-        ns_coeffs=(3.0, -3.2, 1.2),
+        ns_coeffs=NS_COEFFS,
     ):
         """
         Appendix J, Algorithm2 in - https://arxiv.org/abs/2409.19606
