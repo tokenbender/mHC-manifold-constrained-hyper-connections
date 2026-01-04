@@ -47,7 +47,7 @@ hc_disable = False
 mhc = True
 sinkhorn_iters = 10
 sinkhorn_tau = 0.05
-mhc_h_res_proj = "orthostochastic"
+mhc_h_res_proj = "sinkhorn"
 
 NS_COEFFS = (
     (7.2086, -15.5131, 9.0178),
