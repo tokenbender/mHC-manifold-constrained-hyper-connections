@@ -23,7 +23,7 @@ n_embd = 150
 dropout = 0.0
 bias = False
 
-batch_size = 32
+batch_size = 16
 gradient_accumulation_steps = 4
 max_iters = 10000
 eval_interval = 500
