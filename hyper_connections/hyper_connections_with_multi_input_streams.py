@@ -256,7 +256,8 @@ class HyperConnections(Module):
             # handle channel first
 
             if transpose:
-                additional_residuals = rearrange('b d ... -> b ... d')
+                # FIX: pass `additional_residuals` as the first arg to einops.rearrange (previously missing and would error)
+                additional_residuals = rearrange(additional_residuals, 'b d ... -> b ... d')
 
             additional_residuals = rearrange(additional_residuals, '(b s) ... d -> b ... s d', s = self.num_residual_streams)
 
@@ -270,7 +271,8 @@ class HyperConnections(Module):
             # transpose out
 
             if transpose:
-                additional_residuals = rearrange('b ... d -> b d ...')
+                # FIX: pass `additional_residuals` as the first arg to einops.rearrange (previously missing and would error)
+                additional_residuals = rearrange(additional_residuals, 'b ... d -> b d ...')
 
             # set back transformed residual
 

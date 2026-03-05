@@ -41,7 +41,7 @@ def identity(t):
 
 # main functions
 
-def get_expand_reduce_stream_functions(cls, num_streams, disable = False):
+def get_expand_reduce_stream_functions(num_streams, disable = False):
     if num_streams == 1 or disable:
         return (nn.Identity(), nn.Identity())
 
@@ -50,7 +50,7 @@ def get_expand_reduce_stream_functions(cls, num_streams, disable = False):
 
     return expand_fn, reduce_fn
 
-def get_init_and_expand_reduce_stream_functions(cls, num_streams, disable = None):
+def get_init_and_expand_reduce_stream_functions(num_streams, disable = None):
 
     disable = default(disable, num_streams == 1)
 
@@ -108,7 +108,9 @@ class HyperConnections(Module):
 
         stream_branches = num_residual_streams * num_branch_inputs
         layer_index = default(layer_index, randrange(stream_branches))
-        layer_offset = layer_index % stream_branches * num_branch_inputs
+        # FIX: offset should cycle through residual streams;
+        #  previous formula used `stream_branches * num_branch_inputs` and caused repeated/biased init patterns
+        layer_offset = layer_index % num_residual_streams
 
         stream_seq = torch.arange(num_residual_streams)
         branch_input_seq = torch.arange(num_branch_inputs)
