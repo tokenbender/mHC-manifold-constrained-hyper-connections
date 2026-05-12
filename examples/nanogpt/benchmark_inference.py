@@ -199,24 +199,15 @@ def main(argv: list[str] | None = None) -> int:
             )
 
         prefill_ms: list[float] = []
-        decode_total_ms: list[float] = []
-        end_to_end_ms: list[float] = []
+        generation_ms: list[float] = []
+        generation_per_token_ms: list[float] = []
         tokens_per_sec: list[float] = []
         peak_vram_mb: list[float] = []
 
         for _ in range(args.num_iters):
             reset_peak_memory(torch, device)
             prefill = timed_prefill(model, input_ids, torch, device=device, dtype=dtype)
-            decode = timed_decode(
-                model,
-                input_ids,
-                torch,
-                gen_len=args.gen_len,
-                block_size=block_size,
-                device=device,
-                dtype=dtype,
-            )
-            total = timed_decode(
+            generation = timed_decode(
                 model,
                 input_ids,
                 torch,
@@ -226,20 +217,31 @@ def main(argv: list[str] | None = None) -> int:
                 dtype=dtype,
             )
             prefill_ms.append(prefill)
-            decode_total_ms.append(decode / args.gen_len)
-            end_to_end_ms.append(total)
+            generation_ms.append(generation)
+            generation_per_token_ms.append(generation / args.gen_len)
             tokens = args.batch_size * args.gen_len
-            tokens_per_sec.append(tokens / (total / 1000.0) if total > 0 else math.inf)
+            tokens_per_sec.append(
+                tokens / (generation / 1000.0) if generation > 0 else math.inf
+            )
             current_peak = peak_memory_mb(torch, device)
             if current_peak is not None:
                 peak_vram_mb.append(current_peak)
 
         metrics = {
             "prefill_latency_ms": stat_summary(prefill_ms),
-            "decode_latency_per_token_ms": stat_summary(decode_total_ms),
-            "end_to_end_latency_ms": stat_summary(end_to_end_ms),
+            "full_context_generation_latency_ms": stat_summary(generation_ms),
+            "full_context_generation_latency_per_token_ms": stat_summary(
+                generation_per_token_ms
+            ),
             "tokens_per_sec": stat_summary(tokens_per_sec),
         }
+        # Backward-compatible aliases for outputs created before metric rename.
+        metrics["decode_latency_per_token_ms"] = metrics[
+            "full_context_generation_latency_per_token_ms"
+        ]
+        metrics["end_to_end_latency_ms"] = metrics[
+            "full_context_generation_latency_ms"
+        ]
         if peak_vram_mb:
             metrics["peak_vram_mb"] = stat_summary(peak_vram_mb)
         else:
@@ -272,7 +274,10 @@ def main(argv: list[str] | None = None) -> int:
                 "compile": args.compile,
                 "seed": args.seed,
             },
-            "benchmark_note": "simple nanoGPT full-context decode; no KV cache",
+            "benchmark_method": (
+                "simple nanoGPT full-context generation; no KV cache; "
+                "not a production serving benchmark"
+            ),
         }
         payload = {"metadata": metadata, "metrics": metrics}
 
@@ -290,12 +295,12 @@ def main(argv: list[str] | None = None) -> int:
             f"{metrics['prefill_latency_ms']['mean']:.3f}"
         )
         print(
-            "decode_latency_per_token_ms.mean: "
-            f"{metrics['decode_latency_per_token_ms']['mean']:.3f}"
+            "full_context_generation_latency_ms.mean: "
+            f"{metrics['full_context_generation_latency_ms']['mean']:.3f}"
         )
         print(
-            "end_to_end_latency_ms.mean: "
-            f"{metrics['end_to_end_latency_ms']['mean']:.3f}"
+            "full_context_generation_latency_per_token_ms.mean: "
+            f"{metrics['full_context_generation_latency_per_token_ms']['mean']:.3f}"
         )
         print(f"tokens_per_sec.mean: {metrics['tokens_per_sec']['mean']:.3f}")
         print(f"peak_vram: {format_memory(metrics['peak_vram_mb']['max'])}")

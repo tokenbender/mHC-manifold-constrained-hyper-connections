@@ -116,6 +116,8 @@ def test_benchmark_cli_writes_machine_readable_outputs(tmp_path: Path):
     assert payload["metadata"]["dtype"] == "float32"
     assert payload["metadata"]["settings"]["gen_len"] == 2
     assert "prefill_latency_ms" in payload["metrics"]
+    assert "full_context_generation_latency_ms" in payload["metrics"]
+    assert "full_context_generation_latency_per_token_ms" in payload["metrics"]
     assert "decode_latency_per_token_ms" in payload["metrics"]
     assert "end_to_end_latency_ms" in payload["metrics"]
     assert "tokens_per_sec" in payload["metrics"]
@@ -125,10 +127,52 @@ def test_benchmark_cli_writes_machine_readable_outputs(tmp_path: Path):
     assert rows
     assert {row["metric"] for row in rows} >= {
         "prefill_latency_ms",
+        "full_context_generation_latency_ms",
+        "full_context_generation_latency_per_token_ms",
         "decode_latency_per_token_ms",
         "end_to_end_latency_ms",
         "tokens_per_sec",
     }
+
+
+def test_gpt_config_propagates_mhc_identity_mix_and_constrained_vres():
+    repo_dir = Path(__file__).resolve().parents[1]
+    nanogpt_dir = repo_dir / "examples" / "nanogpt"
+    sys.path.insert(0, str(nanogpt_dir))
+    try:
+        from model import GPT, GPTConfig
+
+        cfg = GPTConfig(
+            block_size=8,
+            vocab_size=128,
+            n_layer=1,
+            n_head=1,
+            n_embd=16,
+            hc_num_streams=4,
+            hc_disable=False,
+            mhc=True,
+            mhc_residual_identity_mix=True,
+            mhc_residual_alpha=0.01,
+            v_residual=True,
+            v_residual_constrained=True,
+        )
+        model = GPT(cfg)
+    finally:
+        sys.path.remove(str(nanogpt_dir))
+
+    assert model.config.mhc_residual_identity_mix is True
+    assert model.config.mhc_residual_alpha == 0.01
+    assert model.config.v_residual_constrained is True
+    attn = model.transformer.h[0].attn
+    weights = torch.softmax(attn.lamb_logits, dim=0)
+    assert torch.all(weights >= 0)
+    torch.testing.assert_close(weights.sum(), torch.ones(()))
+    logits, loss = model(
+        torch.randint(0, 128, (2, 4)),
+        torch.randint(0, 128, (2, 4)),
+    )
+    assert logits.shape == (2, 4, 128)
+    assert loss is not None
 
 
 def test_infer_cli_generates_text_with_tiktoken(tmp_path: Path):

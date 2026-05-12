@@ -47,9 +47,9 @@ run_variant() {
     --output-csv "${OUT_DIR}/${name}.csv"
 }
 
-run_variant "baseline" "${CKPT_BASELINE:-}" "${SCRIPT_DIR}/config/train_fineweb10B.py"
-run_variant "hc" "${CKPT_HC:-}" "${SCRIPT_DIR}/config/train_fineweb10B_hc.py"
-run_variant "mhc" "${CKPT_MHC:-}" "${SCRIPT_DIR}/config/train_fineweb10B_mhc.py"
+run_variant "baseline" "${CKPT_BASELINE:-}" "${SCRIPT_DIR}/config/train_fineweb10B_t4.py"
+run_variant "hc" "${CKPT_HC:-}" "${SCRIPT_DIR}/config/train_fineweb10B_hc_t4.py"
+run_variant "mhc" "${CKPT_MHC:-}" "${SCRIPT_DIR}/config/train_fineweb10B_mhc_t4.py"
 run_variant "vres" "${CKPT_VRES:-}" "${SCRIPT_DIR}/config/train_fineweb10B_vres.py"
 run_variant "vres_mhc" "${CKPT_VRES_MHC:-}" "${SCRIPT_DIR}/config/train_fineweb10B_vres_mhc.py"
 

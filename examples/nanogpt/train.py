@@ -98,6 +98,7 @@ mhc_residual_alpha = 0.01
 
 # value residual config
 v_residual = False
+v_residual_constrained = False
 v_residual_lamb_lr = 1e-2
 
 # dtype: "float32", "bfloat16", "float16"
@@ -169,6 +170,8 @@ if mhc:
 
 if v_residual:
     wandb_tags.append("v_residual")
+    if v_residual_constrained:
+        wandb_tags.append("v_residual_constrained")
 
 # -----------------------------------------------------------------------------
 # DDP setup
@@ -365,8 +368,11 @@ def _write_config_effective(*, out_dir_path: Path) -> None:
         "ns_steps",
         "ns_eps",
         "ns_coeffs",
+        "mhc_residual_identity_mix",
+        "mhc_residual_alpha",
         # v-residual
         "v_residual",
+        "v_residual_constrained",
         "v_residual_lamb_lr",
         # logging
         "wandb_log",
@@ -412,6 +418,19 @@ def _write_dataset_manifest(*, out_dir_path: Path, dataset_name: str, data_dir_p
         "val": [file_info(p) for p in val_files],
     }
     _atomic_write_json(out_dir_path / "dataset_manifest.json", payload)
+
+
+def _append_metrics_jsonl(*, out_dir_path: Path, payload: dict) -> None:
+    path = out_dir_path / "metrics.jsonl"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a", encoding="utf-8") as f:
+        f.write(json.dumps(_json_safe(payload), sort_keys=True) + "\n")
+
+
+def _peak_vram_mb() -> Optional[float]:
+    if device_type != "cuda":
+        return None
+    return torch.cuda.max_memory_allocated() / (1024**2)
 
 
 out_dir_path = Path(out_dir)
@@ -547,7 +566,10 @@ model_config = GPTConfig(
     ns_steps=ns_steps,
     ns_eps=ns_eps,
     ns_coeffs=ns_coeffs,
+    mhc_residual_identity_mix=mhc_residual_identity_mix,
+    mhc_residual_alpha=mhc_residual_alpha,
     v_residual=v_residual,
+    v_residual_constrained=v_residual_constrained,
     v_residual_lamb_lr=v_residual_lamb_lr,
 )
 
@@ -714,38 +736,41 @@ run_error = None
 try:
     if wandb is not None:
         wandb.init(
-        project=wandb_project,
-        name=wandb_run_name,
-        group=wandb_group,
-        job_type=wandb_job_type,
-        tags=wandb_tags,
-        config={
-            "dataset": dataset,
-            "n_layer": n_layer,
-            "n_head": n_head,
-            "n_embd": n_embd,
-            "batch_size": batch_size,
-            "block_size": block_size,
-            "learning_rate": learning_rate,
-            "max_iters": max_iters,
-            "hc_num_streams": hc_num_streams,
-            "hc_num_fracs": hc_num_fracs,
-            "hc_disable": hc_disable,
-            "mhc": mhc,
-            "sinkhorn_iters": sinkhorn_iters,
-            "sinkhorn_tau": sinkhorn_tau,
-            "mhc_h_res_proj": mhc_h_res_proj,
-            "ns_steps": ns_steps,
-            "ns_eps": ns_eps,
-            "ns_coeffs": ns_coeffs,
-            "v_residual": v_residual,
-            "v_residual_lamb_lr": v_residual_lamb_lr,
-            "dtype": dtype,
-            "world_size": ddp_world_size,
-            "tokens_per_iter": tokens_per_iter,
-            "wandb_log_layer_stats": wandb_log_layer_stats,
-            "wandb_log_layer_cosine": wandb_log_layer_cosine,
-        },
+            project=wandb_project,
+            name=wandb_run_name,
+            group=wandb_group,
+            job_type=wandb_job_type,
+            tags=wandb_tags,
+            config={
+                "dataset": dataset,
+                "n_layer": n_layer,
+                "n_head": n_head,
+                "n_embd": n_embd,
+                "batch_size": batch_size,
+                "block_size": block_size,
+                "learning_rate": learning_rate,
+                "max_iters": max_iters,
+                "hc_num_streams": hc_num_streams,
+                "hc_num_fracs": hc_num_fracs,
+                "hc_disable": hc_disable,
+                "mhc": mhc,
+                "sinkhorn_iters": sinkhorn_iters,
+                "sinkhorn_tau": sinkhorn_tau,
+                "mhc_h_res_proj": mhc_h_res_proj,
+                "ns_steps": ns_steps,
+                "ns_eps": ns_eps,
+                "ns_coeffs": ns_coeffs,
+                "mhc_residual_identity_mix": mhc_residual_identity_mix,
+                "mhc_residual_alpha": mhc_residual_alpha,
+                "v_residual": v_residual,
+                "v_residual_constrained": v_residual_constrained,
+                "v_residual_lamb_lr": v_residual_lamb_lr,
+                "dtype": dtype,
+                "world_size": ddp_world_size,
+                "tokens_per_iter": tokens_per_iter,
+                "wandb_log_layer_stats": wandb_log_layer_stats,
+                "wandb_log_layer_cosine": wandb_log_layer_cosine,
+            },
         )
 
     while iter_num <= max_iters:
@@ -790,6 +815,19 @@ try:
                     "best_val_loss": best_val_loss,
                 }
                 torch.save(checkpoint, os.path.join(out_dir, "ckpt.pt"))
+            _append_metrics_jsonl(
+                out_dir_path=out_dir_path,
+                payload={
+                    "event": "eval",
+                    "iter": iter_num,
+                    "train_loss_eval": losses["train"],
+                    "val_loss": losses["val"],
+                    "best_val_loss": best_val_loss,
+                    "lr": lr,
+                    "timestamp": time.time(),
+                    "peak_vram_mb": _peak_vram_mb(),
+                },
+            )
 
         t0 = time.time()
 
@@ -835,9 +873,24 @@ try:
 
         if iter_num % log_interval == 0 and master_process:
             loss_item = loss.item() * gradient_accumulation_steps
+            grad_norm_item = grad_norm.item() if grad_norm is not None else None
             print(
                 f"iter {iter_num}: loss {loss_item:.4f}, lr {lr:.2e}, "
                 f"time {dt * 1000:.0f}ms, tok/s {tokens_per_sec:.0f}"
+            )
+            _append_metrics_jsonl(
+                out_dir_path=out_dir_path,
+                payload={
+                    "event": "train",
+                    "iter": iter_num,
+                    "train_loss": loss_item,
+                    "lr": lr,
+                    "iteration_time_ms": dt * 1000,
+                    "tokens_per_sec": tokens_per_sec,
+                    "grad_norm": grad_norm_item,
+                    "timestamp": time.time(),
+                    "peak_vram_mb": _peak_vram_mb(),
+                },
             )
             if wandb is not None:
                 log_dict = {
@@ -848,8 +901,8 @@ try:
                     "perf/elapsed_s": time.time() - start_time,
                     "tokens/seen": iter_num * tokens_per_iter,
                 }
-                if grad_norm is not None:
-                    log_dict["train/grad_norm"] = grad_norm.item()
+                if grad_norm_item is not None:
+                    log_dict["train/grad_norm"] = grad_norm_item
                 if device_type == "cuda":
                     log_dict["perf/max_mem_allocated_mb"] = (
                         torch.cuda.max_memory_allocated() / 1e6
@@ -858,8 +911,8 @@ try:
                         torch.cuda.max_memory_reserved() / 1e6
                     )
                 wandb.log(log_dict, step=iter_num)
-                if device_type == "cuda":
-                    torch.cuda.reset_peak_memory_stats()
+            if device_type == "cuda":
+                torch.cuda.reset_peak_memory_stats()
 
         iter_num += 1
 

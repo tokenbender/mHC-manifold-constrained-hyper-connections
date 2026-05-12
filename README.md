@@ -25,6 +25,24 @@ This is a research prototype aimed at correctness + clarity, not the paper's sys
 
 Run from `examples/nanogpt/`. Adjust `--nproc_per_node` to match your GPU count.
 
+**Recommended T4 comparison (single GPU, presentation workflow):**
+```bash
+MAX_ITERS=5000 EVAL_INTERVAL=500 EVAL_ITERS=50 \
+BATCH_SIZE=8 GRAD_ACCUM=8 DEVICE=cuda DTYPE=float16 WANDB_LOG=False \
+bash examples/nanogpt/run_t4_train_compare.sh
+```
+
+This trains the main comparison variants:
+- baseline Transformer residual: `config/train_fineweb10B_t4.py`
+- traditional HC: `config/train_fineweb10B_hc_t4.py`
+- mHC: `config/train_fineweb10B_mhc_t4.py`
+
+Each run writes local `metrics.jsonl` and `ckpt.pt` under its output directory.
+Use `docs/T4_INFERENCE_BENCHMARK.md` for inference, benchmark, and summary
+commands. This is a small-scale nanoGPT/FineWeb10B comparison, not a full paper
+reproduction; do not use random or smoke checkpoints as model-quality evidence.
+Paper benchmarks such as BBH/MMLU/GSM8K are not reproduced here.
+
 **6-layer configs (~20M params):**
 ```bash
 python train.py config/train_fineweb10B.py

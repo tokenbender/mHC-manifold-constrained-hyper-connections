@@ -39,6 +39,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "mhc_residual_identity_mix": False,
     "mhc_residual_alpha": 0.01,
     "v_residual": False,
+    "v_residual_constrained": False,
     "v_residual_lamb_lr": 1e-2,
 }
 
