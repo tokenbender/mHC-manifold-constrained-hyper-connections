@@ -209,7 +209,8 @@ __marimo__/
 # mHC project local reference/docs (not tracked)
 reference-hc/
 reference-valueres/
-docs/
+docs/*
+!docs/T4_INFERENCE_BENCHMARK.md
 infra_scripts/
 AGENTS.md
 .DS_Store

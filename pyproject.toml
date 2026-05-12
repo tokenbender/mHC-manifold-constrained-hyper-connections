@@ -31,6 +31,7 @@ dependencies = [
     "pytest>=8.2.0",
     "basedpyright>=1.21.0",
     "numpy>=1.26.0",
+    "tiktoken>=0.7.0",
     "wandb>=0.16.0",
 ]
 
