@@ -69,6 +69,10 @@ dataset = "fineweb10B"
 # to `examples/nanogpt/data/<dataset>`.
 data_dir = None
 
+# FineWeb10B loader. "memmap" lazily reads shard slices and is the default for
+# Colab-sized RAM. "eager" preserves the old torch.cat-all-shards behavior.
+data_loader = "memmap"
+
 NS_COEFFS = (
     (7.2086, -15.5131, 9.0178),
     (3.9623, -2.5813, 0.4542),
@@ -336,6 +340,8 @@ def _write_config_effective(*, out_dir_path: Path) -> None:
         # output + run
         "out_dir",
         "dataset",
+        "data_dir",
+        "data_loader",
         "seed",
         "dtype",
         "compile_model",
@@ -497,6 +503,42 @@ def load_fineweb_shard(path):
 
     return tokens
 
+
+class FineWebMemmapShard:
+    """FineWeb shard metadata plus lazy uint16 token memmap."""
+
+    def __init__(self, path):
+        self.path = str(path)
+        header = np.memmap(
+            self.path,
+            mode="r",
+            dtype=np.int32,
+            shape=(HEADER_SIZE,),
+        )
+        assert int(header[0]) == FINEWEB_MAGIC, f"bad magic in {path}"
+        assert int(header[1]) == FINEWEB_VERSION, f"bad version in {path}"
+        self.num_tokens = int(header[2])
+        self.tokens = np.memmap(
+            self.path,
+            mode="r",
+            dtype=np.uint16,
+            offset=HEADER_SIZE * 4,
+            shape=(self.num_tokens,),
+        )
+
+    def __len__(self):
+        return self.num_tokens
+
+
+def load_fineweb_memmap_shards(paths, split):
+    shards = [FineWebMemmapShard(path) for path in paths]
+    usable = [shard for shard in shards if shard.num_tokens > block_size]
+    if not usable:
+        raise ValueError(
+            f"no {split} shards in {data_dir} have more than block_size={block_size} tokens"
+        )
+    return usable
+
 # find shards
 train_shards = sorted(glob.glob(os.path.join(data_dir, "fineweb_train_*.bin")))
 val_shards = sorted(glob.glob(os.path.join(data_dir, "fineweb_val_*.bin")))
@@ -506,6 +548,7 @@ assert len(val_shards) > 0, f"no val shards found in {data_dir}"
 
 if master_process:
     print(f"Found {len(train_shards)} train shards, {len(val_shards)} val shards")
+    print(f"Data loader: {data_loader}")
     _write_dataset_manifest(
         out_dir_path=out_dir_path,
         dataset_name=dataset,
@@ -514,13 +557,23 @@ if master_process:
         val_files=val_shards,
     )
 
-# load all shards into memory (for simplicity; ~200MB per shard)
-# for large-scale, would stream shards instead
-train_data = torch.cat([load_fineweb_shard(s) for s in train_shards])
-val_data = torch.cat([load_fineweb_shard(s) for s in val_shards])
+if data_loader == "eager":
+    train_data = torch.cat([load_fineweb_shard(s) for s in train_shards])
+    val_data = torch.cat([load_fineweb_shard(s) for s in val_shards])
+    train_data_source = train_data
+    val_data_source = val_data
+    train_token_count = len(train_data)
+    val_token_count = len(val_data)
+elif data_loader == "memmap":
+    train_data_source = load_fineweb_memmap_shards(train_shards, "train")
+    val_data_source = load_fineweb_memmap_shards(val_shards, "val")
+    train_token_count = sum(len(shard) for shard in train_data_source)
+    val_token_count = sum(len(shard) for shard in val_data_source)
+else:
+    raise ValueError(f"unknown data_loader: {data_loader}")
 
 if master_process:
-    print(f"Train tokens: {len(train_data):,}, Val tokens: {len(val_data):,}")
+    print(f"Train tokens: {train_token_count:,}, Val tokens: {val_token_count:,}")
 
 vocab_size = 50304  # GPT-2 vocab size rounded up for efficiency
 
@@ -529,11 +582,27 @@ vocab_size = 50304  # GPT-2 vocab size rounded up for efficiency
 
 
 def get_batch(split):
-    data = train_data if split == "train" else val_data
-    ix = torch.randint(len(data) - block_size, (batch_size,))
+    data = train_data_source if split == "train" else val_data_source
 
-    x = torch.stack([data[i : i + block_size] for i in ix])
-    y = torch.stack([data[i + 1 : i + 1 + block_size] for i in ix])
+    if data_loader == "eager":
+        ix = torch.randint(len(data) - block_size, (batch_size,))
+        x = torch.stack([data[i : i + block_size] for i in ix])
+        y = torch.stack([data[i + 1 : i + 1 + block_size] for i in ix])
+    else:
+        shard = data[torch.randint(len(data), (1,)).item()]
+        ix = torch.randint(shard.num_tokens - block_size, (batch_size,))
+        windows = np.stack(
+            [
+                np.asarray(
+                    shard.tokens[int(i) : int(i) + block_size + 1],
+                    dtype=np.int64,
+                )
+                for i in ix
+            ]
+        )
+        batch = torch.from_numpy(windows)
+        x = batch[:, :-1].contiguous()
+        y = batch[:, 1:].contiguous()
 
     if device_type == "cuda":
         x = x.pin_memory().to(device, non_blocking=True)

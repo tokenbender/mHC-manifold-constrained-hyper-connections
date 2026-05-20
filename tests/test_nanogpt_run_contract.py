@@ -95,6 +95,8 @@ def test_nanogpt_run_contract_smoke(tmp_path: Path):
         "run_metadata.json",
         "config_effective.json",
         "dataset_manifest.json",
+        "metrics.jsonl",
+        "ckpt.pt",
         "summary.json",
     ]
     for name in required:
@@ -121,6 +123,7 @@ def test_nanogpt_run_contract_smoke(tmp_path: Path):
     assert cfg["compile_model"] is False
     assert cfg["wandb_log"] is False
     assert cfg["mhc"] is False
+    assert cfg["data_loader"] == "memmap"
 
     # dataset_manifest.json
     manifest = json.loads((out_dir / "dataset_manifest.json").read_text(encoding="utf-8"))
