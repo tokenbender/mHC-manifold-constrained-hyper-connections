@@ -230,5 +230,5 @@ wandb/
 artifacts/
 diary/
 repo.xml
-/reports
-/notebooks
+# /reports
+# /notebooks
