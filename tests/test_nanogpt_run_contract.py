@@ -6,6 +6,7 @@ import sys
 from pathlib import Path
 
 import numpy as np
+import pytest
 
 
 FINEWEB_MAGIC = 20240520
@@ -27,6 +28,7 @@ def _write_fineweb_shard(path: Path, tokens: np.ndarray) -> None:
 
 
 def test_nanogpt_run_contract_smoke(tmp_path: Path):
+    pytest.importorskip("torch")
     repo_dir = Path(__file__).resolve().parents[1]
     nanogpt_dir = repo_dir / "examples" / "nanogpt"
 
@@ -53,7 +55,7 @@ def test_nanogpt_run_contract_smoke(tmp_path: Path):
         "compile_model=False",
         "dtype='float32'",
         "device='cpu'",
-        "max_iters=0",
+        "max_iters=1",
         "eval_interval=1",
         "eval_iters=1",
         "log_interval=1",

@@ -26,6 +26,10 @@ import torch
 import torch.distributed as dist
 import torch.nn.functional as F
 from torch.nn.parallel import DistributedDataParallel as DDP
+try:
+    from tqdm.auto import tqdm
+except ModuleNotFoundError:
+    tqdm = None
 
 from hyper_connections import HyperConnections
 from model import GPT, GPTConfig
@@ -121,6 +125,11 @@ wandb_run_name = "baseline"
 wandb_group = None
 wandb_log_layer_stats = True
 wandb_log_layer_cosine = True
+
+# progress / visibility
+use_tqdm = True
+progress_interval = 1
+heartbeat_interval_s = 60
 
 # DDP backend: "nccl", "gloo", etc.
 # If NCCL fails, set NCCL_IB_DISABLE=1 or use backend="gloo"
@@ -389,6 +398,9 @@ def _write_config_effective(*, out_dir_path: Path) -> None:
         "wandb_tags",
         "wandb_log_layer_stats",
         "wandb_log_layer_cosine",
+        "use_tqdm",
+        "progress_interval",
+        "heartbeat_interval_s",
         # DDP
         "backend",
     ]
@@ -420,6 +432,16 @@ def _write_dataset_manifest(*, out_dir_path: Path, dataset_name: str, data_dir_p
         "contract_version": RUN_CONTRACT_VERSION,
         "dataset": dataset_name,
         "data_dir": str(data_dir_path),
+        "data_loader": data_loader,
+        "header": {
+            "size_int32": HEADER_SIZE if "HEADER_SIZE" in globals() else None,
+            "magic": FINEWEB_MAGIC if "FINEWEB_MAGIC" in globals() else None,
+            "version": FINEWEB_VERSION if "FINEWEB_VERSION" in globals() else None,
+        },
+        "shard_counts": {
+            "train": len(train_files),
+            "val": len(val_files),
+        },
         "train": [file_info(p) for p in train_files],
         "val": [file_info(p) for p in val_files],
     }
@@ -532,10 +554,10 @@ class FineWebMemmapShard:
 
 def load_fineweb_memmap_shards(paths, split):
     shards = [FineWebMemmapShard(path) for path in paths]
-    usable = [shard for shard in shards if shard.num_tokens > block_size]
+    usable = [shard for shard in shards if shard.num_tokens > block_size + 1]
     if not usable:
         raise ValueError(
-            f"no {split} shards in {data_dir} have more than block_size={block_size} tokens"
+            f"no {split} shards in {data_dir} have more than block_size + 1 tokens"
         )
     return usable
 
@@ -779,6 +801,11 @@ iter_num = 0
 best_val_loss = 1e9
 last_eval_losses = None
 last_eval_iter = None
+last_train_loss = None
+last_tokens_per_sec = None
+last_grad_norm = None
+last_iter_ms = None
+last_peak_vram_mb = None
 
 tokens_per_iter = gradient_accumulation_steps * ddp_world_size * batch_size * block_size
 if master_process:
@@ -801,8 +828,38 @@ else:
 start_time = time.time()
 run_success = False
 run_error = None
+next_heartbeat_time = start_time + max(0, float(heartbeat_interval_s))
+progress_bar = None
+
+
+def _config_bool(value):
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        return value.strip().lower() in {"1", "true", "yes", "y", "on"}
+    return bool(value)
+
+
+def _progress_write(message: str) -> None:
+    if progress_bar is not None:
+        progress_bar.write(message)
+    else:
+        print(message)
 
 try:
+    if master_process and _config_bool(use_tqdm):
+        if tqdm is None:
+            print("tqdm not installed; progress bar disabled")
+        else:
+            progress_bar = tqdm(
+                total=max_iters + 1,
+                initial=iter_num,
+                dynamic_ncols=True,
+                mininterval=1.0,
+                desc="train",
+                disable=False,
+            )
+
     if wandb is not None:
         wandb.init(
             project=wandb_project,
@@ -853,7 +910,7 @@ try:
             losses, layer_cosine = estimate_loss()
             last_eval_losses = losses
             last_eval_iter = iter_num
-            print(
+            _progress_write(
                 f"iter {iter_num}: train loss {losses['train']:.4f}, val loss {losses['val']:.4f}"
             )
             if wandb is not None:
@@ -939,11 +996,17 @@ try:
 
         dt = time.time() - t0
         tokens_per_sec = tokens_per_iter / dt
+        loss_item = loss.item() * gradient_accumulation_steps
+        grad_norm_item = grad_norm.item() if grad_norm is not None else None
+        peak_vram_item = _peak_vram_mb()
+        last_train_loss = loss_item
+        last_tokens_per_sec = tokens_per_sec
+        last_grad_norm = grad_norm_item
+        last_iter_ms = dt * 1000
+        last_peak_vram_mb = peak_vram_item
 
         if iter_num % log_interval == 0 and master_process:
-            loss_item = loss.item() * gradient_accumulation_steps
-            grad_norm_item = grad_norm.item() if grad_norm is not None else None
-            print(
+            _progress_write(
                 f"iter {iter_num}: loss {loss_item:.4f}, lr {lr:.2e}, "
                 f"time {dt * 1000:.0f}ms, tok/s {tokens_per_sec:.0f}"
             )
@@ -958,7 +1021,7 @@ try:
                     "tokens_per_sec": tokens_per_sec,
                     "grad_norm": grad_norm_item,
                     "timestamp": time.time(),
-                    "peak_vram_mb": _peak_vram_mb(),
+                    "peak_vram_mb": peak_vram_item,
                 },
             )
             if wandb is not None:
@@ -983,6 +1046,39 @@ try:
             if device_type == "cuda":
                 torch.cuda.reset_peak_memory_stats()
 
+        if master_process and heartbeat_interval_s > 0 and time.time() >= next_heartbeat_time:
+            elapsed_min = (time.time() - start_time) / 60.0
+            val_text = "n/a"
+            if last_eval_losses is not None and "val" in last_eval_losses:
+                val_text = f"{last_eval_losses['val']:.4f}"
+            train_text = "n/a" if last_train_loss is None else f"{last_train_loss:.4f}"
+            tok_text = "n/a" if last_tokens_per_sec is None else f"{last_tokens_per_sec:.0f}"
+            vram_text = "n/a" if last_peak_vram_mb is None else f"{last_peak_vram_mb:.0f}"
+            _progress_write(
+                "heartbeat: "
+                f"iter={iter_num}/{max_iters} elapsed_min={elapsed_min:.1f} "
+                f"train_loss={train_text} val_loss={val_text} tok_s={tok_text} "
+                f"peak_vram_mb={vram_text} out_dir={out_dir}"
+            )
+            next_heartbeat_time = time.time() + float(heartbeat_interval_s)
+
+        if progress_bar is not None:
+            if iter_num % max(1, int(progress_interval)) == 0 or iter_num >= max_iters:
+                postfix = {
+                    "iter": iter_num,
+                    "loss": f"{loss_item:.4f}",
+                    "lr": f"{lr:.2e}",
+                    "iter_ms": f"{last_iter_ms:.0f}",
+                    "tok_s": f"{tokens_per_sec:.0f}",
+                    "best_val": f"{best_val_loss:.4f}",
+                }
+                if grad_norm_item is not None:
+                    postfix["grad_norm"] = f"{grad_norm_item:.3f}"
+                if last_peak_vram_mb is not None:
+                    postfix["peak_vram_mb"] = f"{last_peak_vram_mb:.0f}"
+                progress_bar.set_postfix(postfix)
+            progress_bar.update(1)
+
         iter_num += 1
 
     run_success = True
@@ -990,6 +1086,8 @@ except Exception:
     run_error = traceback.format_exc()
     raise
 finally:
+    if progress_bar is not None:
+        progress_bar.close()
     if master_process:
         end_time = time.time()
         summary = {

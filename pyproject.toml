@@ -33,6 +33,8 @@ dependencies = [
     "numpy>=1.26.0",
     "tiktoken>=0.7.0",
     "wandb>=0.16.0",
+    "tqdm>=4.66.0",
+    "matplotlib>=3.8.0",
 ]
 
 [project.urls]
