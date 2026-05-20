@@ -230,3 +230,4 @@ wandb/
 artifacts/
 diary/
 repo.xml
+/reports
