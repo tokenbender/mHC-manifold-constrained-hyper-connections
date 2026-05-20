@@ -229,3 +229,4 @@ scripts/
 wandb/
 artifacts/
 diary/
+repo.xml

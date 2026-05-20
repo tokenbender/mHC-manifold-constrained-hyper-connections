@@ -29,19 +29,46 @@ Run from `examples/nanogpt/`. Adjust `--nproc_per_node` to match your GPU count.
 ```bash
 MAX_ITERS=5000 EVAL_INTERVAL=500 EVAL_ITERS=50 \
 BATCH_SIZE=8 GRAD_ACCUM=8 DEVICE=cuda DTYPE=float16 WANDB_LOG=False \
-bash examples/nanogpt/run_t4_train_compare.sh
+BENCH_BATCH_SIZE=1 PROMPT_LEN=128 GEN_LEN=32 NUM_WARMUP=5 NUM_ITERS=20 COMPILE=false \
+bash examples/nanogpt/run_t4_full_compare.sh
 ```
 
-This trains the main comparison variants:
+This trains, verifies checkpoints, runs inference benchmarks, and writes
+report-ready summaries for the main comparison variants:
 - baseline Transformer residual: `config/train_fineweb10B_t4.py`
 - traditional HC: `config/train_fineweb10B_hc_t4.py`
 - mHC: `config/train_fineweb10B_mhc_t4.py`
 
-Each run writes local `metrics.jsonl` and `ckpt.pt` under its output directory.
+Default report output:
+- `reports/t4-YYYYmmdd-HHMMSS/training_summary.csv`
+- `reports/t4-YYYYmmdd-HHMMSS/training_summary.md`
+- `reports/t4-YYYYmmdd-HHMMSS/training_summary.json`
+- `reports/t4-YYYYmmdd-HHMMSS/benchmarks/summary.csv`
+- `reports/t4-YYYYmmdd-HHMMSS/benchmarks/summary.md`
+
+To train only:
+```bash
+MAX_ITERS=5000 EVAL_INTERVAL=500 EVAL_ITERS=50 \
+BATCH_SIZE=8 GRAD_ACCUM=8 DEVICE=cuda DTYPE=float16 WANDB_LOG=False \
+bash examples/nanogpt/run_t4_train_compare.sh
+```
+
+To summarize existing training runs only:
+```bash
+python examples/nanogpt/summarize_training_runs.py --output-dir reports/t4-compare
+```
+
+Each run writes local `metrics.jsonl`, `summary.json`, run metadata, and
+`ckpt.pt` under its output directory. Training summaries use those actual files
+and checkpoint existence; benchmark summaries use benchmark JSON files. No fake
+metrics or hardcoded results are generated.
+
 Use `docs/T4_INFERENCE_BENCHMARK.md` for inference, benchmark, and summary
 commands. This is a small-scale nanoGPT/FineWeb10B comparison, not a full paper
-reproduction; do not use random or smoke checkpoints as model-quality evidence.
-Paper benchmarks such as BBH/MMLU/GSM8K are not reproduced here.
+reproduction. Train/val loss and perplexity are quality signals only if
+checkpoints were actually trained. Inference benchmarks use synthetic tokens and
+measure runtime, not language quality. Paper benchmarks such as
+BBH/MMLU/GSM8K are not reproduced here.
 
 **6-layer configs (~20M params):**
 ```bash

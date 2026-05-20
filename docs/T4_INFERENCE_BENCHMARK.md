@@ -33,6 +33,8 @@ New files:
 - `examples/nanogpt/run_t4_benchmarks.sh`: multi-variant T4 helper.
 - `examples/nanogpt/run_t4_train_compare.sh`: baseline/HC/mHC training helper.
 - `examples/nanogpt/summarize_benchmarks.py`: JSON benchmark summarizer.
+- `examples/nanogpt/summarize_training_runs.py`: training-run CSV/Markdown/JSON summarizer.
+- `examples/nanogpt/run_t4_full_compare.sh`: one-command train, benchmark, and report helper.
 
 The implementation is intentionally direct PyTorch. It does not add KV cache,
 vLLM, TensorRT, custom CUDA kernels, or training changes.
@@ -64,6 +66,39 @@ Outputs:
 
 For a quick pipeline test, lower `MAX_ITERS`, `EVAL_INTERVAL`, and `EVAL_ITERS`.
 Do not present smoke-test checkpoints as model-quality evidence.
+
+## Full T4 Compare Workflow
+
+To train baseline, HC, and mHC from scratch, verify checkpoints, run synthetic
+inference benchmarks, and write report-ready summaries:
+
+```bash
+MAX_ITERS=5000 EVAL_INTERVAL=500 EVAL_ITERS=50 \
+BATCH_SIZE=8 GRAD_ACCUM=8 DEVICE=cuda DTYPE=float16 WANDB_LOG=False \
+BENCH_BATCH_SIZE=1 PROMPT_LEN=128 GEN_LEN=32 NUM_WARMUP=5 NUM_ITERS=20 COMPILE=false \
+bash examples/nanogpt/run_t4_full_compare.sh
+```
+
+By default this writes to `reports/t4-YYYYmmdd-HHMMSS/`:
+
+- `training_summary.csv`
+- `training_summary.md`
+- `training_summary.json`
+- `benchmarks/baseline.json`, `benchmarks/hc.json`, `benchmarks/mhc.json`
+- `benchmarks/summary.csv`
+- `benchmarks/summary.md`
+
+Useful switches:
+
+```bash
+RUN_TRAIN=false bash examples/nanogpt/run_t4_full_compare.sh
+RUN_BENCH=false bash examples/nanogpt/run_t4_full_compare.sh
+STRICT_CKPT=false bash examples/nanogpt/run_t4_full_compare.sh
+REPORT_DIR=reports/t4-final bash examples/nanogpt/run_t4_full_compare.sh
+```
+
+`STRICT_CKPT=true` is default. Missing baseline/HC/mHC checkpoints fail early.
+Set `STRICT_CKPT=false` only when you intentionally want benchmark skipping.
 
 ## Run Inference
 
@@ -131,6 +166,31 @@ python examples/nanogpt/summarize_benchmarks.py benchmarks/t4-YYYYmmdd-HHMMSS
 
 This writes `summary.csv` and `summary.md`.
 
+## Summarize Training Runs Only
+
+After training, summarize existing output directories without rerunning training
+or benchmarks:
+
+```bash
+python examples/nanogpt/summarize_training_runs.py \
+  --runs baseline=examples/nanogpt/out-t4-baseline \
+         hc=examples/nanogpt/out-t4-hc \
+         mhc=examples/nanogpt/out-t4-mhc \
+  --output-dir reports/t4-compare
+```
+
+The default run set is the same baseline/HC/mHC T4 directories, so this shorter
+command is equivalent:
+
+```bash
+python examples/nanogpt/summarize_training_runs.py --output-dir reports/t4-compare
+```
+
+The training summary reads actual files from each run directory:
+`summary.json`, `config_effective.json`, `run_metadata.json`, `metrics.jsonl`,
+and checkpoint existence at `ckpt.pt`. Missing runs are included as rows with
+`ok=false`; no metric values are invented.
+
 ## Metrics
 
 - `prefill_latency_ms`: time for one forward pass over the prompt tokens.
@@ -168,6 +228,11 @@ variant | checkpoint | params | prefill ms | decode ms/token | tokens/sec | peak
 Do not claim BBH, MMLU, GSM8K, or other paper benchmark reproduction unless you
 actually implement and run those evaluations. This repo workflow is a small-scale
 nanoGPT/FineWeb10B comparison.
+
+Training loss, validation loss, and validation perplexity are model-quality
+signals only when the checkpoints were actually trained for the claimed setup.
+The inference benchmark uses synthetic token IDs and measures runtime behavior;
+it does not measure language quality.
 
 ## Known Limitations
 
