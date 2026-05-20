@@ -185,6 +185,7 @@ def main(argv: list[str] | None = None) -> int:
     save_bar_plot(args.output_dir / "final_val_ppl_bar.png", "Final Validation Perplexity", "perplexity", final_ppl)
     save_line_plot(args.output_dir / "tokens_per_sec_curve.png", "Training Throughput", "tokens/sec", tok_series)
     save_line_plot(args.output_dir / "training_peak_vram_curve.png", "Training Peak VRAM", "MB", vram_series)
+    save_line_plot(args.output_dir / "peak_vram_curve.png", "Training Peak VRAM", "MB", vram_series)
 
     if args.benchmark_summary is not None and args.benchmark_summary.exists():
         rows = read_benchmark_summary(args.benchmark_summary)

@@ -214,6 +214,7 @@ def test_plot_training_comparison_writes_pngs(tmp_path: Path):
         "final_val_ppl_bar.png",
         "tokens_per_sec_curve.png",
         "training_peak_vram_curve.png",
+        "peak_vram_curve.png",
         "inference_tokens_per_sec_bar.png",
         "decode_ms_per_token_bar.png",
         "benchmark_peak_vram_bar.png",
@@ -222,3 +223,23 @@ def test_plot_training_comparison_writes_pngs(tmp_path: Path):
         path = out_dir / name
         assert path.exists(), name
         assert path.stat().st_size > 0
+
+
+def test_colab_notebook_is_mini_first():
+    repo_dir = Path(__file__).resolve().parents[1]
+    notebook = json.loads(
+        (repo_dir / "notebooks" / "mhc_colab_t4_train_compare.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    text = "\n".join("".join(cell.get("source", [])) for cell in notebook["cells"])
+
+    assert "Mini Colab T4 Training and Benchmark" in text
+    assert 'EXPERIMENT_PRESET = "mini"' in text
+    assert 'RUN_NAME = f"t4-{EXPERIMENT_PRESET}-fineweb{DATA_SHARDS}shards-{MAX_ITERS}iters"' in text
+    assert '"out_dir": "out-t4-mini-baseline"' in text
+    assert '"out_dir": "out-t4-mini-hc"' in text
+    assert '"out_dir": "out-t4-mini-mhc"' in text
+    assert "Smoke test — not for reporting" in text
+    assert "Optional Full T4 Experiment — not recommended for Colab Free" in text
+    assert "not full paper reproduction" in text
