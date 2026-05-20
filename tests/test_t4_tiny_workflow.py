@@ -227,11 +227,10 @@ def test_plot_training_comparison_writes_pngs(tmp_path: Path):
 
 def test_colab_notebook_is_mini_first():
     repo_dir = Path(__file__).resolve().parents[1]
-    notebook = json.loads(
-        (repo_dir / "notebooks" / "mhc_colab_t4_train_compare.json").read_text(
-            encoding="utf-8"
-        )
-    )
+    notebook_path = repo_dir / "notebooks" / "mhc_colab_t4_train_compare.ipynb"
+    if not notebook_path.exists():
+        notebook_path = repo_dir / "notebooks" / "mhc_colab_t4_train_compare.json"
+    notebook = json.loads(notebook_path.read_text(encoding="utf-8"))
     text = "\n".join("".join(cell.get("source", [])) for cell in notebook["cells"])
 
     assert "Mini Colab T4 Training and Benchmark" in text
