@@ -1,0 +1,76 @@
+{
+  "metadata": {
+    "benchmark_method": "simple nanoGPT full-context generation; no KV cache; not a production serving benchmark",
+    "checkpoint_path": "/kaggle/working/mhc/examples/nanogpt/out-t4-hc/ckpt.pt",
+    "config_path": "/kaggle/working/mhc/examples/nanogpt/config/train_fineweb10B_hc_t4.py",
+    "cuda_available": true,
+    "device": "cuda",
+    "dtype": "float16",
+    "git_commit": "a7dec54c156785513c7463b03bcbda7cae865645",
+    "gpu_name": "Tesla T4",
+    "model_parameter_count": 20782680,
+    "settings": {
+      "batch_size": 1,
+      "block_size": 1024,
+      "compile": false,
+      "gen_len": 32,
+      "num_iters": 20,
+      "num_warmup": 5,
+      "prompt_len": 128,
+      "seed": 1337
+    },
+    "torch_cuda_version": "12.8",
+    "torch_version": "2.10.0+cu128"
+  },
+  "metrics": {
+    "decode_latency_per_token_ms": {
+      "max": 16.958051500068905,
+      "mean": 15.183434064078938,
+      "median": 15.004599500002769,
+      "min": 14.803478968815398,
+      "std": 0.4939450432760308
+    },
+    "end_to_end_latency_ms": {
+      "max": 542.657648002205,
+      "mean": 485.869890050526,
+      "median": 480.1471840000886,
+      "min": 473.71132700209273,
+      "std": 15.806241384832985
+    },
+    "full_context_generation_latency_ms": {
+      "max": 542.657648002205,
+      "mean": 485.869890050526,
+      "median": 480.1471840000886,
+      "min": 473.71132700209273,
+      "std": 15.806241384832985
+    },
+    "full_context_generation_latency_per_token_ms": {
+      "max": 16.958051500068905,
+      "mean": 15.183434064078938,
+      "median": 15.004599500002769,
+      "min": 14.803478968815398,
+      "std": 0.4939450432760308
+    },
+    "peak_vram_mb": {
+      "max": 79.02978515625,
+      "mean": 79.02978515625,
+      "median": 79.02978515625,
+      "min": 79.02978515625,
+      "std": 0.0
+    },
+    "prefill_latency_ms": {
+      "max": 15.796884999872418,
+      "mean": 15.160230199762736,
+      "median": 15.079471000717604,
+      "min": 14.81394200163777,
+      "std": 0.2774527192777006
+    },
+    "tokens_per_sec": {
+      "max": 67.55168849880306,
+      "mean": 65.92562107702634,
+      "median": 66.64623249147063,
+      "min": 58.969038983985676,
+      "std": 1.9798458689766083
+    }
+  }
+}
